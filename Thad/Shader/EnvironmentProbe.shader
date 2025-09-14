@@ -22,13 +22,14 @@ Shader "Thad/EnvironmentProbe"
 
         Pass
         {
+            Tags {"LightMode"="ForwardBase"}
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #pragma target 5.0
 
-            #pragma multi_compile _PROJECTION_NONE _PROJECTION_BOX _PROJECTION_CAMERADEPTH
-            #pragma shader_feature _ENABLE_FADE
+            #pragma multi_compile_local _PROJECTION_NONE _PROJECTION_BOX _PROJECTION_CAMERADEPTH
+            #pragma shader_feature_local _ENABLE_FADE
 
             #include "UnityCG.cginc"
             #include "UnityStandardUtils.cginc"
