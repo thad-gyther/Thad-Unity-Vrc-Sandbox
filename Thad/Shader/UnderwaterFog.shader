@@ -5,12 +5,14 @@
         [HDR][Gamma]_ColorLight ("Light Color", Color) = (1,1,1,1)
         _ColorAbsorbtion ("Light Absorbtion Color", Color) = (0.5,0.5,0.5,1)
         _ColorVolume ("Base Volume Color (usually black)", Color) = (0,0,0,1)
+        _Opacity ("Overall opacity (usually 1)", Range(0,1)) = 1
         _SurfaceLevel ("Surface Level", Float) = 0.0
         _Clarity ("Clarity", Range(0,1)) = 0.5
         [KeywordEnum(Off, Simple, Full)] _SceneLighting ("Scene Lighting", Float) = 0
         [KeywordEnum(Ignore, Clip, Show)] _AboveSurface ("Above Surface", Float) = 2
         [Toggle(_IGNORE_DEPTH)] _IGNORE_DEPTH ("Ignore Depth", Float) = 0
         [Toggle(_FULLSCREEN_EFFECT)] _FULLSCREEN_EFFECT ("Fullscreen Effect (put on a quad)", Float) = 0
+        [Toggle(_IN_BACKGROUND)] _IN_BACKGROUND ("Render in Background", Float) = 0
     }
     SubShader
     {
@@ -41,6 +43,7 @@
             #pragma multi_compile_local _ABOVESURFACE_IGNORE _ABOVESURFACE_CLIP _ABOVESURFACE_SHOW
             #pragma shader_feature_local _IGNORE_DEPTH
             #pragma shader_feature_local _FULLSCREEN_EFFECT
+            #pragma shader_feature_local _IN_BACKGROUND
 
             #include "UnityCG.cginc"
 
@@ -79,8 +82,10 @@
             half3 _ColorLight;
             half3 _ColorAbsorbtion;
             half3 _ColorVolume;
+            half _Opacity;
             float _SurfaceLevel;
             float _Clarity;
+            float _VRChatMirrorMode;
 
             #if !_IGNORE_DEPTH
                 UNITY_DECLARE_DEPTH_TEXTURE( _CameraDepthTexture );
@@ -99,7 +104,7 @@
                     #if UNITY_UV_STARTS_AT_TOP
                         clipCoord.y = -clipCoord.y;
                     #endif
-                    o.vertex = float4(clipCoord, 0.5, 1.0);
+                    o.vertex = float4(clipCoord, UNITY_NEAR_CLIP_VALUE, 1.0);
                     float4 viewPos = mul(unity_CameraInvProjection, o.vertex);
                     viewPos /= viewPos.w; // is this necessary?
                     viewPos.y *= _ProjectionParams.x;
@@ -116,6 +121,14 @@
 
                 #if !_IGNORE_DEPTH
                     o.screenPos = ComputeScreenPos(o.vertex);
+                #endif
+
+                #if _IN_BACKGROUND
+                    #if UNITY_REVERSED_Z
+                        o.vertex.z = 0.0;
+                    #else
+                        o.vertex.z = o.vertex.w;
+                    #endif
                 #endif
 
                 return o;
@@ -161,11 +174,15 @@
 
                 #if _FULLSCREEN_EFFECT
                     float3 worldViewDir = normalize(i.worldViewDir);
-                    #if _IGNORE_DEPTH
-                        float distance = _ProjectionParams.z;
-                    #else
-                        float3 viewPos = i.viewPos * (screenDepth / -i.viewPos.z);
-                        float distance = length(viewPos);
+
+                    float distance = _ProjectionParams.z;
+                    #if !_IGNORE_DEPTH
+                        UNITY_FLATTEN
+                        if (_VRChatMirrorMode <= 0.0)
+                        {
+                            float3 viewPos = i.viewPos * (screenDepth / -i.viewPos.z);
+                            distance = length(viewPos);
+                        }
                     #endif
 
                     #if _ABOVESURFACE_SHOW
@@ -189,12 +206,15 @@
                     float startDistance = length(worldViewDir);
                     worldViewDir /= startDistance;
 
-                    #if _IGNORE_DEPTH
-                        float endDistance = _ProjectionParams.z;
-                    #else
-                        float fragmentDepth = LinearEyeDepth(i.screenPos.z / i.screenPos.w);
-                        float depthRatio = screenDepth / fragmentDepth;
-                        float endDistance = startDistance * depthRatio;
+                    float endDistance = _ProjectionParams.z;
+                    #if !_IGNORE_DEPTH
+                        UNITY_FLATTEN
+                        if (_VRChatMirrorMode <= 0.0)
+                        {
+                            float fragmentDepth = LinearEyeDepth(i.screenPos.z / i.screenPos.w);
+                            float depthRatio = screenDepth / fragmentDepth;
+                            endDistance = startDistance * depthRatio;
+                        }
                     #endif
 
                     #if _ABOVESURFACE_SHOW
@@ -245,6 +265,8 @@
                 half4 color = half4(_ColorVolume.rgb * fog, fog);
                 float3 lightAbsorbtion = lightIntegralFull(heightDelta, worldViewDir, distance);
                 color.rgb += lightColor * lightAbsorbtion;
+
+                color *= _Opacity;
 
                 return color;
             }
