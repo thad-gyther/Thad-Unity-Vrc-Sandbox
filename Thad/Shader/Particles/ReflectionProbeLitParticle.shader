@@ -8,6 +8,7 @@ Shader "Thad/Particle/ReflectionProbeLit"
         [HDR] [Gamma] _Color ("Color", Color) = (1,1,1,1)
         [HDR] [Gamma] _Emission ("Emission", Color) = (0,0,0,1)
         _MainTex ("Main Texture", 2D) = "white" {}
+        [Toggle(_FLIPBOOK_BLENDING)] _FlipbookMode ("Flip-Book Frame Blending", Float) = 0
 
         [Header(Diffusion)]
         [Space(10)]
@@ -78,6 +79,7 @@ Shader "Thad/Particle/ReflectionProbeLit"
             #pragma shader_feature_local _CUSTOM_PROBE_BOUNDS
 
             #pragma shader_feature_local _ADDITIVE_BLENDING
+            #pragma shader_feature_local _FLIPBOOK_BLENDING
             #pragma shader_feature_local _SOFTPARTICLES_ON
             #pragma shader_feature_local _CAMERAFADING_ON
 
@@ -87,7 +89,13 @@ Shader "Thad/Particle/ReflectionProbeLit"
             {
                 float4 vertex : POSITION;
                 float4 color : COLOR;
-                float2 uv : TEXCOORD0;
+
+                #if _FLIPBOOK_BLENDING
+                    float4 uv : TEXCOORD0;
+                    float uvBlend : TEXCOORD1;
+                #else
+                    float2 uv : TEXCOORD0;
+                #endif
 
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -100,6 +108,10 @@ Shader "Thad/Particle/ReflectionProbeLit"
                 float3 worldPos : TEXCOORD1;
                 #if _SOFTPARTICLES_ON || _CAMERAFADING_ON
                     float4 screenPos : TEXCOORD2;
+                #endif
+
+                #if _FLIPBOOK_BLENDING
+                    float3 uv2 : TEXCOORD3;
                 #endif
 
                 UNITY_VERTEX_OUTPUT_STEREO
@@ -254,7 +266,12 @@ Shader "Thad/Particle/ReflectionProbeLit"
                 o.vertex = mul(UNITY_MATRIX_VP, float4(worldPos, 1.0));
                 o.worldPos = worldPos;
 
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                #if _FLIPBOOK_BLENDING
+                    o.uv = v.uv.xy;
+                    o.uv2 = float3(v.uv.zw, v.uvBlend);
+                #else
+                    o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                #endif
 
                 #if _SOFTPARTICLES_ON || _CAMERAFADING_ON
                     o.screenPos = ComputeScreenPos(o.vertex);
@@ -333,6 +350,10 @@ Shader "Thad/Particle/ReflectionProbeLit"
                 color *= 1.0 / totalWeight;
 
                 half4 texColor = tex2D(_MainTex, i.uv);
+                #ifdef _FLIPBOOK_BLENDING
+                    half4 texColor2 = tex2D(_MainTex, i.uv2.xy);
+                    texColor = lerp(texColor, texColor2, i.uv2.z);
+                #endif
                 texColor *= i.color;
                 color.rgb += _Emission;
                 color *= texColor.rgb;
