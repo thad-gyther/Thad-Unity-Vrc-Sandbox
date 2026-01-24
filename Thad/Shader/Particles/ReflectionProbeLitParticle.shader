@@ -20,6 +20,7 @@ Shader "Thad/Particle/ReflectionProbeLit"
         [Header(Sample Directions)]
         [Space(10)]
         [Toggle(_SAMPLE_VIEW_DIR)] _SAMPLE_VIEW_DIR ("Sample View Direction", Float) = 1
+        [Toggle(_SAMPLE_PROBE_DIR)] _SAMPLE_PROBE_DIR ("Sample Probe Direction", Float) = 1
         [Toggle(_SAMPLE_POS_X)] _SAMPLE_POS_X ("Sample Positive X", Float) = 0
         [Toggle(_SAMPLE_NEG_X)] _SAMPLE_NEG_X ("Sample Negative X", Float) = 0
         [Toggle(_SAMPLE_POS_Y)] _SAMPLE_POS_Y ("Sample Positive Y", Float) = 0
@@ -70,6 +71,7 @@ Shader "Thad/Particle/ReflectionProbeLit"
 
             #pragma shader_feature_local _FIXED_MIP
             #pragma shader_feature_local _SAMPLE_VIEW_DIR
+            #pragma shader_feature_local _SAMPLE_PROBE_DIR
             #pragma shader_feature_local _SAMPLE_POS_X
             #pragma shader_feature_local _SAMPLE_NEG_X
             #pragma shader_feature_local _SAMPLE_POS_Y
@@ -144,14 +146,19 @@ Shader "Thad/Particle/ReflectionProbeLit"
                 half _SoftParticlesFarFadeDistance;
             #endif
 
-            inline float3 BoxProjectedCubemapDirection2 (float3 cubeMapDir, float3 worldPos, float4 cubemapCenter, float4 boxMin, float4 boxMax, out float boxDistance)
+            inline float DistanceToBounds(float3 cubeMapDir, float3 worldPos, float4 boxMin, float4 boxMax)
             {
                 float3 rbmax = (boxMax.xyz - worldPos) / cubeMapDir;
                 float3 rbmin = (boxMin.xyz - worldPos) / cubeMapDir;
 
                 float3 rbminmax = (cubeMapDir > 0.0) ? rbmax : rbmin;
 
-                float fa = min(min(rbminmax.x, rbminmax.y), rbminmax.z);
+                return min(min(rbminmax.x, rbminmax.y), rbminmax.z);
+            }
+
+            inline float3 BoxProjectedCubemapDirection2 (float3 cubeMapDir, float3 worldPos, float4 cubemapCenter, float4 boxMin, float4 boxMax, out float boxDistance)
+            {
+                float fa = DistanceToBounds(cubeMapDir, worldPos, boxMin, boxMax);
 
                 worldPos -= cubemapCenter.xyz;
                 cubeMapDir = worldPos + (cubeMapDir * fa);
@@ -303,6 +310,16 @@ Shader "Thad/Particle/ReflectionProbeLit"
                         cubeMapDir, i.worldPos, unity_SpecCube0_ProbePosition, boxMin, boxMax, distance
                     );
                     SampleProbe(cubeMapDir, distance, color, totalWeight);
+                #endif
+
+                #if _SAMPLE_PROBE_DIR
+                    cubeMapDir = i.worldPos - unity_SpecCube0_ProbePosition.xyz;
+                    #if _FIXED_MIP
+                        SampleProbe(cubeMapDir, 0.0, color, totalWeight);
+                    #else
+                        distance = DistanceToBounds(cubeMapDir, i.worldPos, boxMin, boxMax);
+                        SampleProbe(cubeMapDir, distance, color, totalWeight);
+                    #endif
                 #endif
 
                 #if _SAMPLE_POS_X
