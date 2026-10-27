@@ -162,7 +162,7 @@ Shader "Thad/EnvironmentProbe"
             ENDCG
         }
 
-        // uncomment if shadow casting is unwanted, also remove tag "ForceNoShadowCasting"
+        // uncomment if shadow casting is wanted, also remove tag "ForceNoShadowCasting"
         /*Pass
         {
             Tags {"LightMode"="ShadowCaster"}
